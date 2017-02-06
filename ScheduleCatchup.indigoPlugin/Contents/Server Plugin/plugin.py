@@ -13,6 +13,7 @@ import os
 import shutil
 import json
 import logging
+import threading
 from operator import itemgetter
 
 from ghpu import GitHubPluginUpdater
@@ -51,7 +52,7 @@ class Plugin(indigo.PluginBase):
         self.logger.debug(u"logLevel = " + str(self.logLevel))
 
         self.debugLog(u"Initializing plugin.")
-
+        self.andTimers = False
         self.updater = GitHubPluginUpdater(self)
         self.configUpdaterInterval = self.pluginPrefs.get('configUpdaterInterval', 24)
         self.configUpdaterForceUpdate = self.pluginPrefs.get('configUpdaterFUpdate', False)
@@ -86,7 +87,19 @@ class Plugin(indigo.PluginBase):
         self.saveTimers(pluginAction)
 
 
-    def saveTimers(self,pluginAction):
+    def saveTimers(self):
+
+        currentState = self.getTimerVariable()
+
+        if currentState == "paused":
+            self.debugLog(u'Timers Already Paused - cannot rerun')
+            return
+
+
+        self.variableTimeraction("paused")
+
+        self.debugLog(u'loadTimers Current State:' + unicode(currentState))
+
         self.debugLog(u'savedTimers called')
         timersDict = {}
         timersDict['control']= 'save'
@@ -112,10 +125,89 @@ class Plugin(indigo.PluginBase):
                 json.dump(timersDict, fp)
         except Exception as error :
             self.debugLog(u'Saving Error '+unicode(error))
+            self.andTimers = False
+
+        self.andTimers = False
 
 
+    def variableaction(self, action):
 
-    def saveSchedule(self,pluginAction):
+
+        self.debugLog(u'variableaction called with action:'+unicode(action))
+        if not ('ScheduleCatchUP' in indigo.variables.folders):
+            #create folder
+            folderId = indigo.variables.folder.create('ScheduleCatchUP')
+            folder = folderId.id
+        else:
+            folder = indigo.variables.folders.getId('ScheduleCatchUP')
+
+        if not ('ScheduleCatchUPState' in indigo.variables):
+            newVar = indigo.variable.create('ScheduleCatchUPState', str(action), folder)
+        else:
+            indigo.variable.updateValue('ScheduleCatchUPState', str(action))
+
+        return
+
+    def variableTimeraction(self, action):
+
+
+        self.debugLog(u'variableTimer action called with action:'+unicode(action))
+        if not ('ScheduleCatchUP' in indigo.variables.folders):
+            #create folder
+            folderId = indigo.variables.folder.create('ScheduleCatchUP')
+            folder = folderId.id
+        else:
+            folder = indigo.variables.folders.getId('ScheduleCatchUP')
+
+        if not ('ScheduleCatchUPTimerState' in indigo.variables):
+            newVar = indigo.variable.create('ScheduleCatchUPTimerState', str(action), folder)
+        else:
+            indigo.variable.updateValue('ScheduleCatchUPTimerState', str(action))
+
+        return
+
+
+    def getVariable(self):
+
+        self.debugLog(u'get the variable called')
+        newVar ="none"
+
+        if not ('ScheduleCatchUP' in indigo.variables.folders):
+            return "none"
+
+        if not ('ScheduleCatchUPState' in indigo.variables):
+            return "none"
+        else:
+            newVar = indigo.variables['ScheduleCatchUPState'].value
+
+        return newVar
+
+    def getTimerVariable(self):
+
+        self.debugLog(u'get Timer variable called')
+        newVar ="none"
+
+        if not ('ScheduleCatchUP' in indigo.variables.folders):
+            return "none"
+
+        if not ('ScheduleCatchUPTimerState' in indigo.variables):
+            return "none"
+        else:
+            newVar = indigo.variables['ScheduleCatchUPTimerState'].value
+
+        return newVar
+
+    def saveSchedule(self):
+
+        currentState = self.getVariable()
+        self.debugLog(u'Current State:'+unicode(currentState))
+
+        if currentState == "loading":
+            self.debugLog(unicode("Already loading schedule.  Cannot Save."))
+            return
+
+
+        self.variableaction("saving")
 
         self.debugLog(u'Save Schedule called')
         scheduleExclude = self.pluginPrefs.get('scheduleExclude', '')
@@ -142,27 +234,61 @@ class Plugin(indigo.PluginBase):
         except Exception as error :
             self.debugLog(u'Saving Error '+unicode(error))
 
-    def loadData(self,pluginAction):
-        self.debugLog(unicode('loadData called..'))
-        self.debugLog('Sleeping for a bit first..')
-        #self.sleep(180)
-        self.loadSchedule(pluginAction)
-        self.loadTimers(pluginAction)
+        self.sleep(10)
+        self.variableaction("ready")
+        if self.andTimers:
+            self.saveTimers()
 
-    def loadSch(self,pluginAction):
-        self.debugLog(unicode('loadData called..'))
-        self.debugLog('Sleeping for a bit first..')
-        #self.sleep(180)
-        self.loadSchedule(pluginAction)
-        #self.loadTimers(pluginAction)
+    def allActions(self,pluginAction):
 
-    def loadSchedule(self,pluginAction):
+
+        self.debugLog(u'all Actions called and progressing action')
+        #self.debugLog(unicode(pluginAction))
+        currentState = self.getVariable()
+        action = pluginAction.pluginTypeId
+        self.debugLog(unicode("Threading:") + unicode(threading.currentThread().getName()))
+        self.debugLog(unicode("Threading Count:") + unicode(threading.activeCount()))
+
+        if currentState != "ready":
+            self.debugLog(u'Not Ready: State:'+unicode(currentState)+"  Returning without action.")
+            return
+
+        if action == "SaveScheduleTimers":
+            self.andTimers = True
+        if action == "LoadScheduleTimers":
+            self.andTimers = True
+
+        if action == "LoadSchedule" or action == "LoadScheduleTimers":
+            # START AS NEW THREAD AND ONLY ALLOW ONE THREAD
+            t = threading.Thread(target=self.loadSchedule)
+            t.start()
+            #self.loadSchedule(pluginAction)
+            return
+
+        if action == "SaveSchedule" or action == "SaveScheduleTimers":
+            t = threading.Thread(target=self.saveSchedule)
+            t.start()
+            return
+
+
+        return
+
+
+    def loadSchedule(self):
 
 
         self.debugLog(u'Load Schedule called')
 
         hoursCheck = self.pluginPrefs.get('hoursCheck', '24')
 
+        currentState = self.getVariable()
+        self.debugLog(u'Current State:'+unicode(currentState))
+
+        if currentState == "loading":
+            self.debugLog(unicode("Already loading schedule....."))
+            return
+
+        self.variableaction("loading")
 
         schedule = {}
         try:
@@ -176,21 +302,6 @@ class Plugin(indigo.PluginBase):
 
         self.debugLog(unicode(schedule))
 
-
-        if schedule['control'] == 'load':
-            self.debugLog(unicode("Already executing schedule....."))
-            return
-
-
-        schedule['control'] = 'load'
-        # resave the file - with the control data updated to try to avoid running when loading
-        try:
-            folder = self.folderLocation
-            filename = "scheduleSave.json"
-            with open(folder+filename, 'w') as fp:
-                json.dump(schedule, fp)
-        except Exception as error :
-            self.debugLog(u'Saving Error '+unicode(error))
 
         try:
             #schedule['uitimeSaved'] = t.strftime('%Y-%m-%d %H:%M:%S', t.localtime(schedule['controlTime']))
@@ -234,18 +345,26 @@ class Plugin(indigo.PluginBase):
         except Exception as error :
             self.debugLog(u'Exceuting Schedule Error '+unicode(error))
 
-        #resave file with updating control ie. done
-        schedule['control'] = 'done'
-        try:
-            folder = self.folderLocation
-            filename = "scheduleSave.json"
-            with open(folder+filename, 'w') as fp:
-                json.dump(schedule, fp)
-        except Exception as error :
-            self.debugLog(u'Saving Error '+unicode(error))
+        self.debugLog(unicode("tidying up.."))
+        self.sleep(5)
 
-    def loadTimers(self,pluginAction):
+        #resave file with updating control ie. done
+        self.variableaction("ready")
+
+        if self.andTimers:
+            self.debugLog(u'Running Timers Loading...')
+            self.loadTimers()
+
+
+    def loadTimers(self):
         self.debugLog(u'Load Timers called')
+        currentState = self.getTimerVariable()
+
+
+
+
+        self.debugLog(u'loadTimers Current State:'+unicode(currentState))
+
 
         hoursCheck = self.pluginPrefs.get('hoursCheck', '24')
         tId = "com.perceptiveautomation.indigoplugin.timersandpesters"
@@ -259,9 +378,11 @@ class Plugin(indigo.PluginBase):
 
         except Exception as error:
             self.debugLog(u'Loading loadTimers Error ' + unicode(error))
+            self.andTimers = False
 
         self.debugLog(u'timers loaded')
         self.debugLog(unicode(timersDict))
+        self.variableTimeraction("ready")
 
         try:
             timersDict['control'] = "load"
@@ -272,7 +393,10 @@ class Plugin(indigo.PluginBase):
 
         except Exception as error:
             self.debugLog(u'loadTmers Error '+unicode(error))
+            self.andTimers = False
 
+        self.andTimers = False
+        self.variableTimeraction("ready")
 
 
 

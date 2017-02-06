@@ -3,22 +3,22 @@
 
     <Action id="SaveSchedule">
         <Name>Save Schedule</Name>
-        <CallbackMethod>saveSchedule</CallbackMethod>
+        <CallbackMethod>allActions</CallbackMethod>
     </Action>
 
     <Action id="LoadSchedule">
         <Name>Load Schedule</Name>
-        <CallbackMethod>loadSch</CallbackMethod>
+        <CallbackMethod>allActions</CallbackMethod>
     </Action>
 
     <Action id="SaveScheduleTimers">
         <Name>Save Schedule and Pause Timers</Name>
-        <CallbackMethod>saveData</CallbackMethod>
+        <CallbackMethod>allActions</CallbackMethod>
     </Action>
 
     <Action id="LoadScheduleTimers">
         <Name>Load Schedule and Restart Timers</Name>
-        <CallbackMethod>loadData</CallbackMethod>
+        <CallbackMethod>allActions</CallbackMethod>
     </Action>
 
 </Actions>
