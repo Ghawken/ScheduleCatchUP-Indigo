@@ -81,18 +81,13 @@ class Plugin(indigo.PluginBase):
 
         return True
 
-    def saveData(self, pluginAction):
-        self.debugLog(u'Save Data Called')
-        self.saveSchedule(pluginAction)
-        self.saveTimers(pluginAction)
-
 
     def saveTimers(self):
 
         currentState = self.getTimerVariable()
 
         if currentState == "paused":
-            self.debugLog(u'Timers Already Paused - cannot rerun')
+            self.debugLog(u'Timers Already Paused - cannot re-Save until load Schedule/Timers run')
             return
 
 
